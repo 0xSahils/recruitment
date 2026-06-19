@@ -1,0 +1,65 @@
+# Skill normalization dictionary
+# Format: "original_term": ["expanded", "individual", "skills"]
+# Add new mappings as recruiters encounter new shorthand terms.
+
+MERN: ["MongoDB", "Express.js", "React", "Node.js"]
+MEAN: ["MongoDB", "Express.js", "Angular", "Node.js"]
+MEVN: ["MongoDB", "Express.js", "Vue.js", "Node.js"]
+LAMP: ["Linux", "Apache", "MySQL", "PHP"]
+PERN: ["PostgreSQL", "Express.js", "React", "Node.js"]
+
+AWS: ["Amazon Web Services", "EC2", "S3", "Lambda", "Cloud Computing"]
+GCP: ["Google Cloud Platform", "Cloud Computing"]
+Azure: ["Microsoft Azure", "Cloud Computing"]
+
+ML: ["Machine Learning"]
+AI: ["Artificial Intelligence"]
+NLP: ["Natural Language Processing"]
+DL: ["Deep Learning"]
+CV: ["Computer Vision"]
+GenAI: ["Generative AI"]
+
+CI/CD: ["Continuous Integration", "Continuous Deployment"]
+DevOps: ["DevOps", "CI/CD", "Infrastructure"]
+SRE: ["Site Reliability Engineering"]
+IaC: ["Infrastructure as Code"]
+
+REST: ["REST API", "API Development"]
+GraphQL: ["GraphQL", "API Development"]
+gRPC: ["gRPC", "API Development"]
+
+SQL: ["SQL", "Database"]
+NoSQL: ["NoSQL", "Database"]
+
+Frontend: ["Frontend Development", "HTML", "CSS", "JavaScript"]
+Backend: ["Backend Development", "Server-side"]
+Full Stack: ["Frontend Development", "Backend Development", "Full Stack"]
+Fullstack: ["Frontend Development", "Backend Development", "Full Stack"]
+
+DS: ["Data Science"]
+DE: ["Data Engineering"]
+
+OOP: ["Object-Oriented Programming"]
+FP: ["Functional Programming"]
+
+K8s: ["Kubernetes"]
+k8s: ["Kubernetes"]
+
+JS: ["JavaScript"]
+TS: ["TypeScript"]
+Py: ["Python"]
+
+React Native: ["React Native", "Mobile Development", "React"]
+Flutter: ["Flutter", "Dart", "Mobile Development"]
+RN: ["React Native", "Mobile Development"]
+
+Docker: ["Docker", "Containerization"]
+Terraform: ["Terraform", "Infrastructure as Code"]
+Ansible: ["Ansible", "Configuration Management"]
+
+ETL: ["Extract Transform Load", "Data Pipeline"]
+BI: ["Business Intelligence"]
+
+UI/UX: ["UI Design", "UX Design", "User Interface", "User Experience"]
+UX: ["UX Design", "User Experience"]
+UI: ["UI Design", "User Interface"]
