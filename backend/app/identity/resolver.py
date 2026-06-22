@@ -31,10 +31,7 @@ async def find_existing_candidate(
     linkedin_url = normalize_linkedin_url(identity.get("linkedin_url"))
     if linkedin_url:
         stmt = select(Candidate).where(
-            and_(
-                func.lower(Candidate.linkedin_url) == linkedin_url,
-                Candidate.deleted_at.is_(None),
-            )
+            func.lower(Candidate.linkedin_url) == linkedin_url
         )
         result = await session.execute(stmt)
         candidate = result.scalar_one_or_none()
@@ -45,10 +42,7 @@ async def find_existing_candidate(
     email = identity.get("email")
     if email:
         stmt = select(Candidate).where(
-            and_(
-                func.lower(Candidate.email) == email.lower().strip(),
-                Candidate.deleted_at.is_(None),
-            )
+            func.lower(Candidate.email) == email.lower().strip()
         )
         result = await session.execute(stmt)
         candidate = result.scalar_one_or_none()
@@ -58,7 +52,7 @@ async def find_existing_candidate(
 
     phone = normalize_phone(identity.get("phone"))
     if phone and len(phone) >= 7:
-        stmt = select(Candidate).where(Candidate.deleted_at.is_(None))
+        stmt = select(Candidate)
         result = await session.execute(stmt)
         candidates = result.scalars().all()
         for c in candidates:
@@ -67,12 +61,15 @@ async def find_existing_candidate(
                 return c
 
     full_name = identity.get("full_name", "").strip()
-    if full_name:
-        stmt = select(Candidate).where(Candidate.deleted_at.is_(None))
+    if full_name and full_name.lower() != "unknown":
+        stmt = select(Candidate)
         result = await session.execute(stmt)
         candidates = result.scalars().all()
         for c in candidates:
             name_score = fuzz.ratio(full_name.lower(), (c.full_name or "").lower())
+            if name_score >= 95:
+                logger.info(f"Matched by exact name: {full_name} (score={name_score})")
+                return c
             if name_score >= 85:
                 company = identity.get("company") or ""
                 if company and c.current_company:

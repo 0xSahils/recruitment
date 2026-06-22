@@ -1,5 +1,6 @@
 import uuid
 import asyncio
+import sqlalchemy
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from app.schemas import UploadResponse, BatchStatusResponse, UploadFileStatus
 from app.api.deps import get_current_user
@@ -36,6 +37,16 @@ async def _process_batch(batch_id: str, files_data: list[tuple[str, bytes]]):
                     batch["succeeded"] += 1
                 else:
                     batch["failed"] += 1
+
+        except sqlalchemy.exc.IntegrityError as e:
+            logger.warning(f"Concurrent duplicate insertion for {filename}: {e}")
+            batch["files"].append(UploadFileStatus(
+                filename=filename,
+                status="failed",
+                reason="Duplicate profile uploaded at the same time. Already processed.",
+            ))
+            batch["processed"] += 1
+            batch["failed"] += 1
 
         except Exception as e:
             logger.error(f"Error processing {filename}: {e}")

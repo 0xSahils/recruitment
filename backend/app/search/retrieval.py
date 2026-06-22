@@ -14,13 +14,14 @@ LOCATION_ALIASES = {
     "bombay": ["mumbai", "bombay"],
     "delhi": ["delhi", "new delhi", "ncr"],
     "new delhi": ["delhi", "new delhi", "ncr"],
-    "ncr": ["delhi", "new delhi", "ncr", "noida", "gurgaon", "gurugram"],
+    "ncr": ["delhi", "new delhi", "ncr", "noida", "gurgaon", "gurugram", "faridabad", "greater noida"],
     "gurgaon": ["gurgaon", "gurugram"],
     "gurugram": ["gurgaon", "gurugram"],
     "chennai": ["chennai", "madras"],
     "kolkata": ["kolkata", "calcutta"],
     "hyderabad": ["hyderabad", "hyd"],
     "pune": ["pune"],
+    "noida": ["noida", "greater noida"],
 }
 
 
@@ -41,7 +42,7 @@ def build_qdrant_filter(parsed_jd: dict, exclude_rejected: bool = True) -> model
         conditions.append(
             models.FieldCondition(
                 key="total_experience_months",
-                range=models.Range(gte=min_years * 12),
+                range=models.Range(gte=max(0, (min_years - 1) * 12)),
             )
         )
     max_years = exp.get("max_years")
@@ -49,7 +50,7 @@ def build_qdrant_filter(parsed_jd: dict, exclude_rejected: bool = True) -> model
         conditions.append(
             models.FieldCondition(
                 key="total_experience_months",
-                range=models.Range(lte=max_years * 12),
+                range=models.Range(lte=(max_years + 1) * 12),
             )
         )
 
@@ -77,8 +78,16 @@ def bm25_search(query_text: str, candidate_pool: list[dict], top_n: int = 100) -
     if not candidate_pool:
         return []
 
-    corpus = [c.get("payload", {}).get("profile_text", "") for c in candidate_pool]
-    tokenized_corpus = [doc.lower().split() for doc in corpus]
+    corpus = []
+    for c in candidate_pool:
+        payload = c.get("payload", {})
+        text = payload.get("profile_text", "")
+        skills = " ".join(payload.get("normalized_skills", []))
+        role = payload.get("current_role", "")
+        headline = payload.get("headline", "")
+        corpus.append(f"{text} {skills} {role} {headline}".lower())
+
+    tokenized_corpus = [doc.split() for doc in corpus]
     tokenized_query = query_text.lower().split()
 
     bm25 = BM25Okapi(tokenized_corpus)
@@ -121,6 +130,10 @@ def reciprocal_rank_fusion(
 
 def hybrid_retrieve(query_text: str, parsed_jd: dict, exclude_rejected: bool = True, limit: int = 100) -> list[dict]:
     vector_results = vector_search(query_text, parsed_jd, exclude_rejected, limit)
+
+    if not vector_results:
+        return []
+
     bm25_results = bm25_search(query_text, list(vector_results), limit)
     merged = reciprocal_rank_fusion(vector_results, bm25_results)
     return merged[:limit]

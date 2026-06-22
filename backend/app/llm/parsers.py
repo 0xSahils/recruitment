@@ -13,7 +13,11 @@ def safe_parse_json(raw: str) -> dict | None:
         raw = "\n".join(lines)
 
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+            return parsed[0]
     except json.JSONDecodeError:
         pass
 
@@ -21,6 +25,8 @@ def safe_parse_json(raw: str) -> dict | None:
         repaired = json_repair.repair_json(raw, return_objects=True)
         if isinstance(repaired, dict):
             return repaired
+        if isinstance(repaired, list) and repaired and isinstance(repaired[0], dict):
+            return repaired[0]
     except Exception:
         pass
 

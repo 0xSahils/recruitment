@@ -14,6 +14,7 @@ from app.pdf.extractor import extract_text_from_bytes
 from app.llm.client import generate
 from app.llm.prompts import RESUME_PARSE_SYSTEM, RESUME_PARSE_PROMPT
 from app.llm.parsers import safe_parse_json, validate_resume_json
+from app.parsing.linkedin_parser import parse_linkedin_pdf
 from app.parsing.validators import sanitize_parsed_data, parse_date, compute_experience_months
 from app.skills.normalizer import normalize_skills, get_all_normalized_skills
 from app.identity.resolver import find_existing_candidate, normalize_linkedin_url
@@ -23,6 +24,19 @@ from app.vector_db import upsert_candidate_vector
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_education_keywords(parsed: dict) -> list[str]:
+    keywords = []
+    for edu in parsed.get("education", []):
+        degree = (edu.get("degree") or "").lower()
+        field = (edu.get("field") or "").lower()
+        for term in ["mba", "btech", "b.tech", "mtech", "m.tech", "phd", "mca", "bca", "msc", "bsc", "bba", "pgdm"]:
+            if term in degree:
+                keywords.append(term)
+        if field:
+            keywords.append(field)
+    return list(set(keywords))
 
 
 def _candidate_to_profile_dict(candidate: Candidate) -> dict:
@@ -83,17 +97,24 @@ async def process_single_pdf(
         result["reason"] = str(e)
         return result
 
-    prompt = RESUME_PARSE_PROMPT.format(resume_text=raw_text[:6000])
-    try:
-        llm_output = await generate(prompt, system=RESUME_PARSE_SYSTEM)
-    except Exception as e:
-        result["reason"] = f"LLM parsing failed: {e}"
-        return result
+    # Try rule-based LinkedIn parser first (fast + accurate)
+    parsed = parse_linkedin_pdf(raw_text, pdf_bytes=pdf_bytes)
+    if parsed:
+        logger.info(f"{filename}: Using rule-based parser")
+    else:
+        # Fallback to LLM for non-LinkedIn PDFs
+        logger.info(f"{filename}: Rule-based parse failed, falling back to LLM")
+        prompt = RESUME_PARSE_PROMPT.format(resume_text=raw_text[:6000])
+        try:
+            llm_output = await generate(prompt, system=RESUME_PARSE_SYSTEM)
+        except Exception as e:
+            result["reason"] = f"LLM parsing failed: {e}"
+            return result
 
-    parsed = safe_parse_json(llm_output)
-    if parsed is None:
-        result["reason"] = "Failed to parse LLM JSON output"
-        return result
+        parsed = safe_parse_json(llm_output)
+        if not isinstance(parsed, dict):
+            result["reason"] = "Failed to parse LLM JSON output"
+            return result
 
     parsed = sanitize_parsed_data(parsed)
     parsed, confidence = validate_resume_json(parsed)
@@ -103,6 +124,16 @@ async def process_single_pdf(
         return result
 
     identity = parsed.get("identity", {})
+
+    if not identity.get("headline"):
+        exp_list_temp = parsed.get("experience", [])
+        if exp_list_temp:
+            role = exp_list_temp[0].get("role", "")
+            company = exp_list_temp[0].get("company", "")
+            if role and company:
+                identity["headline"] = f"{role} at {company}"
+            elif role:
+                identity["headline"] = role
 
     pdf_filename = f"{uuid.uuid4().hex}_{filename}"
     pdf_path = PDF_STORAGE / pdf_filename
@@ -149,6 +180,7 @@ async def process_single_pdf(
         candidate.extraction_confidence = confidence
         candidate.current_version = new_version
         candidate.updated_at = datetime.utcnow()
+        candidate.deleted_at = None  # Restore candidate if they were soft-deleted
 
         exp = parsed.get("experience", [])
         if exp:
@@ -207,8 +239,9 @@ async def process_single_pdf(
             "headline": candidate.headline or "",
             "current_role": candidate.current_role or "",
             "current_company": candidate.current_company or "",
-            "profile_text": candidate_text[:1000],
+            "profile_text": candidate_text[:8000],
             "extraction_confidence": confidence,
+            "education_keywords": _extract_education_keywords(parsed),
         }
         upsert_candidate_vector(str(candidate.id), embedding, metadata)
 
@@ -297,8 +330,9 @@ async def process_single_pdf(
             "headline": identity.get("headline", ""),
             "current_role": current_role or "",
             "current_company": current_company or "",
-            "profile_text": candidate_text[:1000],
+            "profile_text": candidate_text[:8000],
             "extraction_confidence": confidence,
+            "education_keywords": _extract_education_keywords(parsed),
         }
         upsert_candidate_vector(str(candidate_id), embedding, metadata)
 

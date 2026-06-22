@@ -10,7 +10,8 @@ _client: httpx.AsyncClient | None = None
 def get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(base_url=settings.OLLAMA_BASE_URL, timeout=120.0)
+        # Increased timeout to 600 seconds (10 minutes) for slower CPU-only local environments
+        _client = httpx.AsyncClient(base_url=settings.OLLAMA_BASE_URL, timeout=600.0)
     return _client
 
 
@@ -21,7 +22,7 @@ async def generate(prompt: str, system: str = "", model: str | None = None) -> s
         "prompt": prompt,
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0.1, "num_predict": 4096},
+        "options": {"temperature": 0.1, "num_predict": 2048, "num_ctx": 8192},
     }
     if system:
         payload["system"] = system

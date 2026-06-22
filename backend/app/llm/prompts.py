@@ -1,57 +1,66 @@
-RESUME_PARSE_SYSTEM = """You are a precise data extraction engine. Extract structured information from LinkedIn PDF resume text.
-Return ONLY valid JSON matching the exact schema below. Do not add commentary or markdown."""
+RESUME_PARSE_SYSTEM = """You are a precise resume data extraction engine. You extract structured JSON from LinkedIn PDF text.
+Return ONLY valid JSON. No markdown, no commentary, no extra text."""
 
-RESUME_PARSE_PROMPT = """Extract all information from the following LinkedIn resume text into this exact JSON structure:
+RESUME_PARSE_PROMPT = """Extract structured data from this LinkedIn PDF resume text.
+
+IMPORTANT LinkedIn PDF layout:
+- The person's name is usually the FIRST line.
+- The headline/title is the line right AFTER the name (e.g. "Software Engineer at Google").
+- Location follows, usually a city like "Bangalore, India" or "New York, USA".
+- "Contact" section may contain email, phone, LinkedIn URL (linkedin.com/in/...).
+- "Top Skills" or "Skills" section lists skills.
+- "Summary" or "About" section has a paragraph about them.
+- "Experience" section has jobs with company, role, dates (like "Jan 2020 - Present" or "2019 - 2021").
+- "Education" section has institution, degree, field, dates.
+
+Return this exact JSON schema:
 
 {{
   "identity": {{
-    "linkedin_url": "string or null",
-    "full_name": "string (required)",
-    "headline": "string or null",
-    "location": "string or null",
-    "email": "string or null",
-    "phone": "string or null"
+    "linkedin_url": "the linkedin.com/in/... URL or null",
+    "full_name": "person's full name (REQUIRED - first line of resume)",
+    "headline": "their job title/headline (line after the name) or null",
+    "location": "city, country or null",
+    "email": "email address or null",
+    "phone": "phone number or null"
   }},
-  "summary": "string or null (the About section)",
+  "summary": "the About/Summary paragraph or null",
   "experience": [
     {{
-      "company": "string",
-      "role": "string",
-      "start_date": "YYYY-MM or null",
-      "end_date": "YYYY-MM or null (null means current/present)",
-      "description": "string or null"
+      "company": "company name",
+      "role": "job title/position",
+      "start_date": "YYYY-MM format (e.g. 2020-01 for Jan 2020)",
+      "end_date": "YYYY-MM format or null if current/present job",
+      "description": "job description text or null"
     }}
   ],
   "education": [
     {{
-      "institution": "string",
-      "degree": "string or null",
-      "field": "string or null",
+      "institution": "school/university name",
+      "degree": "degree type (B.Tech, MBA, etc.) or null",
+      "field": "field of study or null",
       "start_date": "YYYY or null",
       "end_date": "YYYY or null"
     }}
   ],
   "skills": {{
-    "original": ["list of skills exactly as written in the resume"],
-    "normalized": ["list of individual technology/skill names expanded from originals"]
+    "original": ["exact skill names from resume"],
+    "normalized": ["expanded individual skills"]
   }},
-  "total_experience_months": 0,
-  "other_sections": {{
-    "certifications": [],
-    "projects": [],
-    "publications": [],
-    "languages": [],
-    "awards": []
-  }}
+  "total_experience_months": 0
 }}
 
-Rules:
-- Extract ALL experience entries, preserving their order from top (most recent) to bottom.
-- For dates, use YYYY-MM format. If only year is given, use YYYY. If "Present" or current, set end_date to null.
-- Calculate total_experience_months by summing all experience durations. If dates are missing, estimate from context.
-- For skills: list skills exactly as found in "Top Skills" or "Skills" sections as "original". Then expand abbreviations into individual skills for "normalized" (e.g., "MERN" → ["MongoDB", "Express.js", "React", "Node.js"]).
-- If a field is not found in the text, set it to null (for strings) or empty array (for lists).
-- Never invent information not present in the text.
+Date rules:
+- Convert ALL dates to YYYY-MM format. "Jan 2020" → "2020-01". "March 2019" → "2019-03". "2021" → "2021-01".
+- Month mapping: Jan=01, Feb=02, Mar=03, Apr=04, May=05, Jun=06, Jul=07, Aug=08, Sep=09, Oct=10, Nov=11, Dec=12
+- If job is current/present, set end_date to null.
+- Calculate total_experience_months by adding up all job durations.
+
+Extraction rules:
+- Extract the headline — it is almost always on line 2 of a LinkedIn PDF, right below the name.
+- Extract ALL experience entries in order (most recent first).
+- For skills: list exactly as found, then expand abbreviations (e.g. "MERN" → ["MongoDB", "Express.js", "React", "Node.js"]).
+- Never invent data. Use null for missing strings, empty arrays for missing lists.
 
 --- RESUME TEXT ---
 {resume_text}

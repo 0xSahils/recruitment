@@ -39,14 +39,11 @@ def compose_candidate_text(candidate_data: dict) -> str:
         parts.append(identity["full_name"])
     if identity.get("headline"):
         parts.append(identity["headline"])
-    if candidate_data.get("summary"):
-        parts.append(candidate_data["summary"])
 
-    for exp in candidate_data.get("experience", []):
-        exp_text = f"{exp.get('role', '')} at {exp.get('company', '')}"
-        if exp.get("description"):
-            exp_text += f": {exp['description']}"
-        parts.append(exp_text)
+    # Education early so it doesn't get truncated
+    for edu in candidate_data.get("education", []):
+        edu_text = f"{edu.get('degree', '')} in {edu.get('field', '')} from {edu.get('institution', '')}"
+        parts.append(edu_text)
 
     skills = candidate_data.get("skills", {})
     normalized = skills.get("normalized", [])
@@ -55,9 +52,14 @@ def compose_candidate_text(candidate_data: dict) -> str:
     if all_skills:
         parts.append("Skills: " + ", ".join(all_skills))
 
-    for edu in candidate_data.get("education", []):
-        edu_text = f"{edu.get('degree', '')} in {edu.get('field', '')} from {edu.get('institution', '')}"
-        parts.append(edu_text)
+    if candidate_data.get("summary"):
+        parts.append(candidate_data["summary"])
+
+    for exp in candidate_data.get("experience", []):
+        exp_text = f"{exp.get('role', '')} at {exp.get('company', '')}"
+        if exp.get("description"):
+            exp_text += f": {exp['description']}"
+        parts.append(exp_text)
 
     return " | ".join(filter(None, parts))
 

@@ -13,7 +13,7 @@ from app.schemas import (
     CandidateListResponse, NoteCreate, NoteOut, VersionOut,
 )
 from app.embeddings.generator import compose_candidate_text, generate_embedding
-from app.vector_db import upsert_candidate_vector
+from app.vector_db import upsert_candidate_vector, delete_candidate_vector
 from app.skills.normalizer import get_all_normalized_skills
 
 router = APIRouter()
@@ -160,7 +160,11 @@ async def delete_candidate(
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     candidate.deleted_at = datetime.utcnow()
-    return {"message": "Candidate soft-deleted"}
+    try:
+        delete_candidate_vector(str(candidate_id))
+    except Exception:
+        pass
+    return {"message": "Candidate deleted"}
 
 
 @router.post("/candidates/{candidate_id}/notes", response_model=NoteOut)

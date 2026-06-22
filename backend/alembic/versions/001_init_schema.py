@@ -17,15 +17,6 @@ depends_on = None
 def upgrade():
     op.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
 
-    candidate_status = sa.Enum(
-        "new", "contacted", "shortlisted", "interview_scheduled", "rejected", "hired",
-        name="candidate_status_enum"
-    )
-    candidate_status.create(op.get_bind(), checkfirst=True)
-
-    skill_source = sa.Enum("linkedin_skills_section", "inferred_from_experience", name="skill_source_enum")
-    skill_source.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "candidates",
         sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()")),
@@ -39,7 +30,7 @@ def upgrade():
         sa.Column("current_role", sa.String(300), nullable=True),
         sa.Column("current_company", sa.String(300), nullable=True),
         sa.Column("total_experience_months", sa.Integer, nullable=True, server_default="0"),
-        sa.Column("candidate_status", candidate_status, nullable=False, server_default="new"),
+        sa.Column("candidate_status", sa.Enum('new', 'contacted', 'shortlisted', 'interview_scheduled', 'rejected', 'hired', name='candidate_status_enum'), nullable=False, server_default="new"),
         sa.Column("raw_extracted_json", JSONB, nullable=True),
         sa.Column("source_pdf_path", sa.Text, nullable=True),
         sa.Column("extraction_confidence", sa.Float, nullable=True),
@@ -84,7 +75,7 @@ def upgrade():
         sa.Column("candidate_id", UUID(as_uuid=True), sa.ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False),
         sa.Column("original_skill", sa.String(200), nullable=False),
         sa.Column("normalized_skills", ARRAY(sa.String(200)), nullable=True),
-        sa.Column("source", skill_source, nullable=False, server_default="linkedin_skills_section"),
+        sa.Column("source", sa.Enum('linkedin_skills_section', 'inferred_from_experience', name='skill_source_enum'), nullable=False, server_default="linkedin_skills_section"),
     )
     op.create_index("ix_skills_normalized", "skills", ["normalized_skills"], postgresql_using="gin")
 

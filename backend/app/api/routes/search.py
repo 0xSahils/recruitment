@@ -18,6 +18,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _build_search_query(original_query: str, parsed_jd: dict) -> str:
+    """Build an enriched query for vector search.
+    Keeps the original query intent but adds structured terms for better recall.
+    """
+    parts = [original_query]
+
+    role = parsed_jd.get("role")
+    if role and role.lower() not in original_query.lower():
+        parts.append(role)
+
+    skills = parsed_jd.get("required_skills", []) + parsed_jd.get("preferred_skills", [])
+    for skill in skills:
+        if skill.lower() not in original_query.lower():
+            parts.append(skill)
+
+    return " ".join(parts)
+
+
 @router.post("/search", response_model=SearchResponse)
 async def search_candidates(
     req: SearchRequest,
@@ -29,9 +47,7 @@ async def search_candidates(
 
     exclude_rejected = req.filters.get("exclude_rejected", True)
 
-    query_text = req.query
-    if parsed_jd.get("role"):
-        query_text = f"{parsed_jd['role']} {' '.join(parsed_jd.get('required_skills', []))} {' '.join(parsed_jd.get('preferred_skills', []))}"
+    query_text = _build_search_query(req.query, parsed_jd)
 
     candidates = hybrid_retrieve(query_text, parsed_jd, exclude_rejected=exclude_rejected, limit=100)
 
@@ -40,6 +56,14 @@ async def search_candidates(
 
     candidates = score_all_candidates(candidates, parsed_jd)
     candidates = add_explanations(candidates, parsed_jd)
+
+    # Adaptive threshold: use the score gap between top candidates to find a natural cutoff
+    min_score = 35.0
+    if candidates:
+        top_score = candidates[0].get("match_score", 0)
+        # Don't show results that are less than 40% of the best match
+        adaptive_threshold = max(min_score, top_score * 0.40)
+        candidates = [c for c in candidates if c.get("match_score", 0) >= adaptive_threshold]
 
     top_results = candidates[:req.limit]
 

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Navbar from "@/components/Navbar";
-import { getCandidate, updateCandidate, addNote, getVersions } from "@/lib/api";
+import { getCandidate, updateCandidate, addNote, getVersions, deleteCandidate } from "@/lib/api";
 import { formatDate, formatExperience } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -55,6 +55,18 @@ export default function CandidateProfilePage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!confirm("Delete this candidate? This cannot be undone.")) return;
+    try {
+      await deleteCandidate(id);
+      queryClient.invalidateQueries({ queryKey: ["candidates"] });
+      toast.success("Candidate deleted");
+      router.push("/candidates");
+    } catch {
+      toast.error("Delete failed");
+    }
+  };
+
   const handleAddNote = async () => {
     if (!noteText.trim()) return;
     try {
@@ -91,9 +103,9 @@ export default function CandidateProfilePage() {
   }
 
   const EditableField = ({ field, value, label }: { field: string; value: string | null; label: string }) => (
-    <div className="group">
+    <span className="group inline-block">
       {editing === field ? (
-        <div className="flex gap-2">
+        <span className="flex gap-2">
           <input
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
@@ -103,7 +115,7 @@ export default function CandidateProfilePage() {
           />
           <button onClick={() => handleFieldSave(field)} className="text-sm text-primary-600">Save</button>
           <button onClick={() => setEditing(null)} className="text-sm text-gray-400">Cancel</button>
-        </div>
+        </span>
       ) : (
         <span
           onClick={() => startEdit(field, value || "")}
@@ -113,7 +125,7 @@ export default function CandidateProfilePage() {
           {value || <span className="text-gray-300 italic">Click to add {label}</span>}
         </span>
       )}
-    </div>
+    </span>
   );
 
   return (
@@ -152,7 +164,7 @@ export default function CandidateProfilePage() {
                 )}
               </div>
             </div>
-            <div className="ml-4">
+            <div className="ml-4 flex flex-col gap-2">
               <select
                 value={candidate.candidate_status}
                 onChange={(e) => handleStatusChange(e.target.value)}
@@ -162,6 +174,12 @@ export default function CandidateProfilePage() {
                   <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                 ))}
               </select>
+              <button
+                onClick={handleDelete}
+                className="text-sm text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition-colors"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -219,7 +237,7 @@ export default function CandidateProfilePage() {
           {candidate.skills?.length > 0 ? (
             <div>
               <div className="flex flex-wrap gap-2 mb-2">
-                {[...new Set(candidate.skills.flatMap((s: any) => s.normalized_skills || []))].map((skill: string) => (
+                {([...new Set(candidate.skills.flatMap((s: any) => s.normalized_skills || []))] as string[]).map((skill: string) => (
                   <span key={skill} className="px-2.5 py-1 bg-primary-50 text-primary-700 rounded-full text-sm font-medium">
                     {skill}
                   </span>
