@@ -33,7 +33,7 @@ def rerank_candidates(
             parts.append(f"Skills: {', '.join(skills)}")
         profile = payload.get("profile_text", "")
         if profile:
-            parts.append(profile[:4000])
+            parts.append(profile[:500])
         documents.append(" | ".join(parts) if parts else "")
 
     try:

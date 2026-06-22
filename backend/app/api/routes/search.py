@@ -49,7 +49,7 @@ async def search_candidates(
 
     query_text = _build_search_query(req.query, parsed_jd)
 
-    candidates = hybrid_retrieve(query_text, parsed_jd, exclude_rejected=exclude_rejected, limit=100)
+    candidates = hybrid_retrieve(query_text, parsed_jd, exclude_rejected=exclude_rejected, limit=30)
 
     if candidates:
         candidates = rerank_candidates(req.query, candidates, top_n=settings.RERANK_TOP_N)

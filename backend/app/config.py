@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     DEMO_USERNAME: str = "demo"
     DEMO_PASSWORD: str = "demo123"
-    RERANK_TOP_N: int = 40
+    RERANK_TOP_N: int = 20
     SEARCH_RETURN_TOP: int = 20
 
     model_config = {"env_file": "../.env", "extra": "ignore"}
