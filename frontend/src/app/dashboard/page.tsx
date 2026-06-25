@@ -93,8 +93,12 @@ export default function DashboardPage() {
                     <span className="mr-3">Skills: {data.parsed_query.required_skills.join(", ")}</span>
                   )}
                   {data.parsed_query.location && <span className="mr-3">Location: {data.parsed_query.location}</span>}
+                  {data.parsed_query.industry && <span className="mr-3">Industry: {data.parsed_query.industry}</span>}
                   {data.parsed_query.experience?.min_years && (
-                    <span>Exp: {data.parsed_query.experience.min_years}+ years</span>
+                    <span className="mr-3">Exp: {data.parsed_query.experience.min_years}+ years</span>
+                  )}
+                  {data.parsed_query.not_terms?.length > 0 && (
+                    <span className="text-red-500">Exclude: {data.parsed_query.not_terms.join(", ")}</span>
                   )}
                 </p>
               </div>

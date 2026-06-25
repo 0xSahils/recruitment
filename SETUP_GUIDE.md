@@ -1,109 +1,131 @@
 # AI Recruitment Intelligence Platform — Setup Guide
 
-> Last updated: 2026-06-20
-> Status: Code complete. Needs dependency install + database migration + test run.
+> Last updated: 2026-06-23
 
 ---
 
-## WHAT'S DONE (100% code complete)
+## PREREQUISITES
 
-### Infrastructure
-- [x] `docker-compose.yml` — PostgreSQL 15 + Qdrant vector DB (both running and healthy)
-- [x] `.env` — All config values set (DB URLs, Ollama, models, demo creds)
-- [x] `.gitignore` — Proper exclusions for venv, node_modules, .env, PDFs
-- [x] Ollama running with `qwen2.5:3b` model pulled
-
-### Backend (FastAPI + Python) — 38 source files
-- [x] **Models** — 7 SQLAlchemy tables: candidates, experiences, education, skills, candidate_versions, candidate_notes, search_logs
-- [x] **Alembic migration** — Full schema with indexes (GIN on skills, unique on linkedin_url, indexes on email/phone/status)
-- [x] **PDF Extractor** — PyMuPDF (fitz) text extraction from LinkedIn PDF exports
-- [x] **LLM Client** — Async httpx client to Ollama with JSON format, temperature 0.1, warmup on startup
-- [x] **Resume Parser** — Structured prompt → JSON extraction → json_repair → validation with confidence scoring
-- [x] **JD Parser** — Extracts role, required/preferred skills, experience range, location from job descriptions
-- [x] **Skill Normalizer** — YAML dictionary (50+ mappings) first, LLM fallback for unknowns
-- [x] **Identity Resolution** — 4-level chain: LinkedIn URL → email → phone → name+company fuzzy match
-- [x] **Version Tracking** — Diff-based change summaries when candidate profiles are re-uploaded
-- [x] **Embeddings** — sentence-transformers (BAAI/bge-small-en-v1.5, 384-dim)
-- [x] **Reranker** — CrossEncoder (BAAI/bge-reranker-v2-m3), top 40 candidates only
-- [x] **Search Pipeline** — Qdrant metadata filter → vector search + BM25 (RRF fusion) → rerank → weighted scoring (50% semantic, 25% skill, 15% role, 10% experience) → match explanations
-- [x] **API Routes** — Auth (JWT), Upload (multipart + background processing), Candidates CRUD, Search, Export CSV
-- [x] **Soft-delete** — `deleted_at` column, filtered from all reads
-
-### Frontend (Next.js 15 + React 19 + TypeScript) — 10 source files
-- [x] **Login page** — Gradient background, demo credentials hint, JWT in localStorage
-- [x] **Dashboard** — JD/natural language search, parsed query display, status filter tabs, ranked cards with match explanations, score breakdown (S/K/R/E), inline status dropdown, export CSV
-- [x] **Upload page** — Drag-and-drop (react-dropzone), batch progress bar, per-file status (new/updated/failed)
-- [x] **Candidates table** — Search, status/location filters, paginated table with status badges
-- [x] **Candidate Profile** — Click-to-edit fields, status dropdown, experience timeline, education, skills badges, notes, version history
-- [x] **API client** — Axios with JWT interceptor, auto-redirect on 401
-- [x] **Providers** — Proper server/client component split (layout is server, providers are client)
+- **Windows 10/11**
+- **Docker Desktop** — https://www.docker.com/products/docker-desktop/
+- **Node.js 18+** — https://nodejs.org/
+- **Ollama** — https://ollama.com/download
+- **Python 3.11** — ⚠️ **MUST be 3.11, NOT 3.12/3.13/3.14** (torch/sentence-transformers break on newer versions)
+  - Download: https://www.python.org/downloads/release/python-3119/
+  - Scroll down → **Windows installer (64-bit)**
+  - ✅ Check **"Add Python 3.11 to PATH"** during install
 
 ---
 
-## WHAT'S LEFT (installation + setup)
+## Step 1: Start Docker Services
 
-### Step 1: Install Python Dependencies (~5-10 min)
+Open a terminal in the project root (where `docker-compose.yml` is):
+
 ```bash
-cd backend
+docker compose up -d
+```
+
+Verify:
+```bash
+docker ps
+```
+You should see `recruit_postgres` and `recruit_qdrant` running.
+
+---
+
+## Step 2: Install Ollama + Pull Model
+
+1. Install Ollama from https://ollama.com/download
+2. Open a terminal:
+```bash
+ollama pull qwen2.5:3b
+```
+3. Verify: `ollama list` should show `qwen2.5:3b`
+
+---
+
+## Step 3: Setup Backend (Python)
+
+Open a terminal in the `backend/` folder:
+
+```bash
+# If you have multiple Python versions, use py -3.11 explicitly
+py -3.11 -m venv venv
+
+# Activate the venv
 venv\Scripts\activate
+
+# Verify — MUST show 3.11.x
+python --version
+
+# Install all dependencies (~5-10 min, downloads torch ~2.5GB)
 pip install -r requirements.txt
 ```
-> **Note:** `torch` (~2.5 GB) and `sentence-transformers` (~500 MB) are the biggest downloads.
-> If torch fails on Python 3.13, try:
+
+> **If torch fails:** run this first, then retry:
 > ```bash
 > pip install torch --index-url https://download.pytorch.org/whl/cpu
 > pip install -r requirements.txt
 > ```
 
-### Step 2: Install Frontend Dependencies (~1-2 min)
+### Run Database Migration
 ```bash
-cd frontend
+alembic upgrade head
+```
+
+### Start Backend
+```bash
+python run.py
+```
+
+First startup takes 30-60 seconds (downloads embedding + reranker models ~1.1GB total).
+Wait until you see:
+```
+INFO:app.main:Models loaded, ready to serve.
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+Health check: open http://localhost:8000/health → `{"status": "ok"}`
+
+---
+
+## Step 4: Setup Frontend (Next.js)
+
+Open a **NEW** terminal in the `frontend/` folder:
+
+```bash
 npm install
-```
-> Already partially installed (327 packages). May just need a clean `npm install`.
-
-### Step 3: Verify Docker Services Are Running
-```bash
-docker compose up -d
-docker ps
-```
-> You should see `recruit_postgres` (healthy) and `recruit_qdrant` (running).
-> If not running: `docker compose up -d` from the project root.
-
-### Step 4: Run Database Migration
-```bash
-cd backend
-venv\Scripts\alembic upgrade head
-```
-> Creates all 7 tables + indexes in PostgreSQL.
-
-### Step 5: Start Backend
-```bash
-cd backend
-venv\Scripts\python run.py
-```
-> On first start:
-> - Creates Qdrant collection (384-dim cosine)
-> - Downloads embedding model BAAI/bge-small-en-v1.5 (~130 MB, one-time)
-> - Downloads reranker model BAAI/bge-reranker-v2-m3 (~1 GB, one-time)
-> - Warms up Ollama (first LLM call)
-> - Should print "Models loaded, ready to serve." and listen on http://localhost:8000
-> - Health check: http://localhost:8000/health → `{"status": "ok"}`
-
-### Step 6: Start Frontend
-```bash
-cd frontend
 npm run dev
 ```
-> Opens on http://localhost:3000
-> Login with: **demo / demo123**
 
-### Step 7: End-to-End Test
-1. Login at http://localhost:3000
-2. Go to Upload → drag in 2-3 LinkedIn PDFs → watch progress bar
-3. Go to Dashboard → type a search like "React developer with 5+ years" → verify ranked results with match explanations
-4. Click a candidate → verify profile, try editing a field, add a note
-5. Go to Candidates table → verify list, try status filter
+You should see:
+```
+▲ Next.js 15.x
+- Local: http://localhost:3000
+```
+
+---
+
+## Step 5: Use the App
+
+1. Open http://localhost:3000
+2. Login: **demo** / **demo123**
+3. Upload → drag LinkedIn PDFs → watch progress
+4. Dashboard → search for candidates
+5. Click a candidate → view/edit profile
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `ModuleNotFoundError: No module named 'torch'` | Wrong Python version. Delete `venv/`, recreate with `py -3.11 -m venv venv` |
+| `KeyboardInterrupt` during startup | Wrong Python version (3.14). Must use 3.11 |
+| `connection refused` on port 5435 | Docker not running. Run `docker compose up -d` |
+| Backend hangs on first search | Reranker model downloading. Wait 1-2 minutes |
+| `Ollama warm-up failed` | Ollama not running. Open Ollama app or run `ollama serve`. Non-fatal warning — search still works |
+| `ECONNRESET` / 500 on search | Backend crashed or restarting. Check the backend terminal for errors |
 
 ---
 

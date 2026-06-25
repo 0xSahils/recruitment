@@ -57,13 +57,24 @@ async def search_candidates(
     candidates = score_all_candidates(candidates, parsed_jd)
     candidates = add_explanations(candidates, parsed_jd)
 
-    # Adaptive threshold: use the score gap between top candidates to find a natural cutoff
+    # Adaptive threshold: filter out weak results
     min_score = 35.0
     if candidates:
         top_score = candidates[0].get("match_score", 0)
-        # Don't show results that are less than 40% of the best match
-        adaptive_threshold = max(min_score, top_score * 0.40)
-        candidates = [c for c in candidates if c.get("match_score", 0) >= adaptive_threshold]
+        # Don't show results below 60% of the best match
+        adaptive_threshold = max(min_score, top_score * 0.60)
+
+        # Gap detection: if there's a big drop between consecutive candidates, cut there
+        final_candidates = [candidates[0]]
+        for i in range(1, len(candidates)):
+            score = candidates[i].get("match_score", 0)
+            prev_score = candidates[i - 1].get("match_score", 0)
+            if score < adaptive_threshold:
+                break
+            if prev_score - score > 15 and score < top_score * 0.70:
+                break
+            final_candidates.append(candidates[i])
+        candidates = final_candidates
 
     top_results = candidates[:req.limit]
 

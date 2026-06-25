@@ -191,6 +191,7 @@ class ParsedQuery(BaseModel):
     experience: dict[str, int | None] = {}
     location: str | None = None
     industry: str | None = None
+    not_terms: list[str] = []
 
 class SearchRequest(BaseModel):
     query: str

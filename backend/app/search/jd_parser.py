@@ -73,6 +73,17 @@ LOCATION_KEYWORDS = [
 ]
 
 
+INDUSTRY_KEYWORDS = [
+    "banking", "finance", "fintech", "insurance", "healthcare", "pharma",
+    "telecom", "telecommunications", "ecommerce", "e-commerce", "retail",
+    "automotive", "manufacturing", "logistics", "supply chain",
+    "education", "edtech", "media", "entertainment", "gaming",
+    "real estate", "construction", "energy", "oil and gas",
+    "consulting", "legal", "government", "defense", "aerospace",
+    "agriculture", "food", "hospitality", "travel", "fmcg",
+]
+
+
 async def parse_jd(query_text: str) -> dict:
     query = query_text.strip()
     words = query.lower().split()
@@ -96,8 +107,34 @@ async def parse_jd(query_text: str) -> dict:
         return _fallback_parse(query)
 
 
-def _rule_based_parse(query: str) -> dict:
+def _parse_logical_operators(query: str) -> dict:
+    """Parse AND/OR/NOT from query. Returns structured conditions."""
     query_lower = query.lower().strip()
+
+    not_terms = []
+    for m in re.finditer(r'\bnot\s+(\w+)', query_lower):
+        not_terms.append(m.group(1))
+    cleaned = re.sub(r'\bnot\s+\w+', '', query_lower).strip()
+
+    or_groups = []
+    if ' or ' in cleaned:
+        parts = re.split(r'\s+or\s+', cleaned)
+        or_groups = [p.strip() for p in parts if p.strip()]
+        cleaned = parts[0]
+
+    cleaned = re.sub(r'\s+and\s+', ' ', cleaned)
+
+    return {
+        "cleaned_query": cleaned,
+        "not_terms": not_terms,
+        "or_groups": or_groups,
+    }
+
+
+def _rule_based_parse(query: str) -> dict:
+    logical = _parse_logical_operators(query)
+    query_lower = logical["cleaned_query"]
+
     result = {
         "role": None,
         "required_skills": [],
@@ -105,7 +142,14 @@ def _rule_based_parse(query: str) -> dict:
         "experience": {"min_years": None, "max_years": None},
         "location": None,
         "industry": None,
+        "not_terms": logical["not_terms"],
     }
+
+    # Add OR groups as preferred skills (any of them is acceptable)
+    for og in logical["or_groups"]:
+        og_stripped = og.strip()
+        if og_stripped:
+            result["preferred_skills"].append(og_stripped)
 
     # Extract experience
     range_match = EXP_RANGE_RE.search(query_lower)
@@ -122,6 +166,14 @@ def _rule_based_parse(query: str) -> dict:
         pattern = r"\b" + re.escape(loc) + r"\b"
         if re.search(pattern, query_lower):
             result["location"] = loc.title()
+            break
+
+    # Extract industry
+    for ind in sorted(INDUSTRY_KEYWORDS, key=len, reverse=True):
+        pattern = r"\b" + re.escape(ind) + r"\b"
+        if re.search(pattern, query_lower):
+            result["industry"] = ind
+            result["required_skills"].append(ind)
             break
 
     # Extract role (longest match first)
@@ -142,19 +194,21 @@ def _rule_based_parse(query: str) -> dict:
             if canon not in found_canonical:
                 found_canonical.add(canon)
                 found_skills.append(skill)
-    result["required_skills"] = found_skills
+    result["required_skills"].extend(found_skills)
 
     # If no explicit role found, build one from the query
     if not result["role"]:
-        role_text = query
+        role_text = query_lower
         role_text = EXP_RANGE_RE.sub("", role_text)
         role_text = EXP_RE.sub("", role_text)
         for loc in LOCATION_KEYWORDS:
             role_text = re.sub(r"\b" + re.escape(loc) + r"\b", "", role_text, flags=re.IGNORECASE)
+        for ind in INDUSTRY_KEYWORDS:
+            role_text = re.sub(r"\b" + re.escape(ind) + r"\b", "", role_text, flags=re.IGNORECASE)
         for skill in found_skills:
             role_text = re.sub(r"\b" + re.escape(skill) + r"\b", "", role_text, flags=re.IGNORECASE)
         role_text = re.sub(
-            r"\b(in|with|at|and|or|for|who|has|have|having|need|looking|want|experience|years?|yrs?)\b",
+            r"\b(in|with|at|and|or|not|for|who|has|have|having|need|looking|want|experience|years?|yrs?|of|exp)\b",
             "", role_text, flags=re.IGNORECASE,
         )
         role_text = re.sub(r"[+\-,]", " ", role_text)
@@ -163,8 +217,8 @@ def _rule_based_parse(query: str) -> dict:
             result["role"] = role_text
 
     # If still no role but we have skills, use the primary skill
-    if not result["role"] and found_skills:
-        result["role"] = found_skills[0]
+    if not result["role"] and result["required_skills"]:
+        result["role"] = result["required_skills"][0]
 
     return result
 

@@ -233,6 +233,24 @@ def _normalize_reranker_score(score: float) -> float:
     return normalized * 100
 
 
+def _check_not_terms(not_terms: list[str], payload: dict) -> bool:
+    """Returns True if candidate should be EXCLUDED (matches a NOT term)."""
+    if not not_terms:
+        return False
+    searchable = " ".join([
+        payload.get("full_name", ""),
+        payload.get("headline", ""),
+        payload.get("current_role", ""),
+        payload.get("current_company", ""),
+        payload.get("profile_text", ""),
+        " ".join(payload.get("normalized_skills", [])),
+    ]).lower()
+    for term in not_terms:
+        if term.lower() in searchable:
+            return True
+    return False
+
+
 def score_candidate(candidate: dict, parsed_jd: dict) -> dict:
     payload = candidate.get("payload", {})
 
@@ -272,10 +290,29 @@ def score_candidate(candidate: dict, parsed_jd: dict) -> dict:
         parsed_jd.get("location"),
     )
 
+    # Relevance gate: if the query has hard requirements, check if the candidate
+    # matches AT LEAST ONE non-semantic dimension. If zero match on everything
+    # the query asked for, this candidate is irrelevant — don't show it.
+    has_skills_req = bool(parsed_jd.get("required_skills"))
+    has_role_req = bool(parsed_jd.get("role"))
+    has_industry_req = bool(parsed_jd.get("industry"))
+    has_hard_requirements = has_skills_req or has_industry_req
+
+    skill_passes = skill_raw is not None and skill_raw > 0
+    role_passes = role_raw is not None and role_raw >= 50
+    exp_passes = exp_raw is not None and exp_raw >= 50
+
+    if has_hard_requirements:
+        if not skill_passes and not role_passes:
+            candidate["match_score"] = 0
+            candidate["score_breakdown"] = {"semantic": 0, "skill": 0, "role": 0, "experience": 0}
+            candidate["_irrelevant"] = True
+            return candidate
+
     # Dynamic weighting: only weight dimensions that the query specifies
-    active = {"semantic": 0.40}
+    active = {"semantic": 0.30}
     if skill_raw is not None:
-        active["skill"] = 0.25
+        active["skill"] = 0.35
     if role_raw is not None:
         active["role"] = 0.15
     if exp_raw is not None:
@@ -309,6 +346,14 @@ def score_candidate(candidate: dict, parsed_jd: dict) -> dict:
 
 
 def score_all_candidates(candidates: list[dict], parsed_jd: dict) -> list[dict]:
-    scored = [score_candidate(c, parsed_jd) for c in candidates]
-    scored.sort(key=lambda x: x.get("match_score", 0), reverse=True)
-    return scored
+    not_terms = parsed_jd.get("not_terms", [])
+    filtered = []
+    for c in candidates:
+        if _check_not_terms(not_terms, c.get("payload", {})):
+            continue
+        scored = score_candidate(c, parsed_jd)
+        if scored.get("_irrelevant"):
+            continue
+        filtered.append(scored)
+    filtered.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+    return filtered
